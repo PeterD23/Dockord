@@ -1,7 +1,7 @@
 # Dockord
 Discord Bot for running Docker containers, written in .NET Core
 
-#Outline
+# Outline
 Docker is a neat technology for quickly spinning up virtual machines that interface directly with the hardware. Its use as a tool for running dedicated servers for games means with an interface on hand like a Discord Bot, these servers can be managed entirely through commands to the bot.
 
 Dockord aims to achieve the following goals:
