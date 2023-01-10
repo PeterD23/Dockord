@@ -24,10 +24,10 @@ namespace Dockord.Docker
 
         private async Task<string> GetListOfContainers()
         {
-            var parameters = new ContainersListParameters() { All = true };
+            var parameters = new ContainersListParameters();
             var containers = await _client.Containers.ListContainersAsync(parameters);
 
-            var response = $"ID     Name\t\tState\t\tStatus\t\tPort(s)";
+            var response = string.Format($"{"ID",-6}{"Name",-25}{"State",-9}{"Status",-15}{"Port(s)",-20}");
 
             if (containers.Count > 0)
             {
@@ -46,11 +46,11 @@ namespace Dockord.Docker
             var portData = "";
             foreach (var port in container.Ports)
             {
-                var ip = port.IP.Length > 0 ? port.IP + ":" : "";
+                var ip = port.IP != null ? port.IP + ":" : "";
                 var publicPort = port.PublicPort != 0 ? port.PublicPort + "->" : "";
-                portData += $"{ip}:{publicPort}->{port.PrivatePort}/{port.Type} ";
+                portData += $"{ip}{publicPort}{port.PrivatePort}/{port.Type} ";
             }
-            return $"{container.ID[..4]}     {string.Join(",", container.Names)}\t\t{container.State}\t\t{container.Status}\t\t{portData}";
+            return string.Format($"{container.ID[..4],-6}{string.Join(",", container.Names),-25}{container.State,-9}{container.Status,-15}{portData,-20}");
         }
 
     }
