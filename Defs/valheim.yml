@@ -1,0 +1,19 @@
+---
+help: Welcome to Valheim! To build this one, you'll want to type \n"!build valheim container_name server_name world_name server_password"\nwhere 'container_name' is the name you want to give to the container, 'server_name' is the name of the server that will appear in the favourites list, 'world_name' is the name of your world file, and 'server_password' is the password to the server. Make sure you write the password down when you're done!
+image-name: lloesche/valheim-server
+folders:
+  - valheim-server/config/worlds
+  - valheim-server/data
+budget: 5
+ports:
+  - 2456-2457/udp
+environment:
+  - SERVER_NAME
+  - WORLD_NAME
+  - SERVER_PASS
+optional-env:
+  - VALHEIM_PLUS
+volumes:
+  - /ContainerData/valheim-server/config:/config
+  - /ContainerData/valheim-server/data:/opt/valheim
+post-build-comment: The Valheim Server configured should now be running under the supplied name. If this is your first valheim server, allow some time (depending on your internet connection) for the server files to download. Once this is done, the server should start automatically. Ensure when connecting to the server you supply the PUBLIC port and not the private. Also make sure you remember the password set since I'm not gonna remind you

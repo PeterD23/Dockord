@@ -1,0 +1,29 @@
+---
+# What Dockord should say if a user wants to create a container.
+help: To build this game, you need the following command: !build game my_game SERVER_NAME SERVER_PASSWORD SERVER_MOTD
+# Supply your base image here, which will for the time being be from Docker Hub.
+image-name: dockord/dockord-game
+# List of folders that need created to bind to. Will be created under /Dockord/ContainerData/
+folders:
+  - valheim-server/config/worlds
+  - valheim-server/data
+# RAM Budget needed. Supplied in gigabytes.
+budget: 128
+# List of ports needing exposed and bound. Dockord will automatically map each port in sequence to a defined public start range.
+ports:
+  - 1234-1235/udp
+  - 24500-24501/tcp
+# List of required environment variables.
+environment:
+  - SERVER_NAME
+  - SERVER_PASSWORD
+  - SERVER_MOTD
+# List of optional environment variables.
+optional-env:
+  - VALHEIM_PLUS
+# List of mounted volume paths. Absolute path starts from Dockord, so start each volume with /ContainerData/
+volumes:
+  - /ContainerData/valheim-server/config:/config
+  - /ContainerData/valheim-server/data:/opt/valheim
+# What Dockord should say after successfully creating the container.
+post-build-comment: The Valheim Server configured should now be running under the supplied name. Ensure when connecting to the server you supply the PUBLIC port and not the private. Also make sure you remember the password set since I'm not gonna remind you

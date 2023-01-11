@@ -1,7 +1,5 @@
-﻿using Discord;
-using Dockord.Discord;
+﻿using Dockord.Discord;
 using Dockord.Docker;
-using System;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -21,6 +19,11 @@ namespace Dockord.Core
                SQLiteController.CreateNewDB();
             }
 
+            if (!Directory.Exists("ContainerData"))
+            {
+                Directory.CreateDirectory("ContainerData");
+            }
+
             DiscordHandler = new DiscordHandler();
             await DiscordHandler.RunBot();
 
@@ -29,7 +32,5 @@ namespace Dockord.Core
 
             await Task.Delay(-1);
         }
-
-
     }
 }

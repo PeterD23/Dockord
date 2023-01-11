@@ -57,7 +57,7 @@ namespace Dockord.Discord
             Console.WriteLine(msg);
 
             // Log to Discord only if connected, and if the log channel is configured correctly
-            if (_client.ConnectionState != ConnectionState.Connected || failedToGetLogChannel) 
+            if (_client.ConnectionState != ConnectionState.Connected || failedToGetLogChannel)
                 return;
             if (logChannel == 0L)
             {
@@ -76,22 +76,26 @@ namespace Dockord.Discord
             await log.SendMessageAsync(msg.ToString());
         }
 
-        private async Task MessageReceived(SocketMessage message)
+        private Task MessageReceived(SocketMessage message)
         {
-            if (message.Author.IsBot) return;
-
-            var messageContent = message.Content;
-
-            if (!RoleMatchesApproved(message.Author) || !messageContent.StartsWith("!")) return;
-
-            await Log(new LogMessage(LogSeverity.Info, "Discord", "Approved User is attempting a command, " + messageContent));
-            var channel = message.Channel as SocketTextChannel;
-
-            var response = await SendCommand(messageContent);
-            if (!response.Equals(""))
+            Task.Run(async () =>
             {
-                await channel.SendMessageAsync(response);
-            }
+                if (message.Author.IsBot) return;
+
+                var messageContent = message.Content;
+
+                if (!RoleMatchesApproved(message.Author) || !messageContent.StartsWith("!")) return;
+
+                await Log(new LogMessage(LogSeverity.Info, "Discord", "Approved User is attempting a command, " + messageContent));
+                var channel = message.Channel as SocketTextChannel;
+
+                var response = await SendCommand(messageContent);
+                if (!response.Equals(""))
+                {
+                    await channel.SendMessageAsync(response);
+                }
+            });
+            return Task.CompletedTask;
         }
 
         private bool RoleMatchesApproved(SocketUser user)

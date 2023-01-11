@@ -10,13 +10,13 @@
     <PackageReference Include="Docker.DotNet" Version="3.125.12" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="7.0.1" />
     <PackageReference Include="SQLite" Version="3.13.0" />
+    <PackageReference Include="YamlDotNet.NetCore" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Docker\" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <None Update="Defs\valheim.yml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="token">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
