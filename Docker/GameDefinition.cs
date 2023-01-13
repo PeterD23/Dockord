@@ -29,14 +29,21 @@ namespace Dockord.Docker
         [YamlMember(Alias = "volumes")]
         public string[] Volumes { get; set; }
 
+        [YamlMember(Alias = "binds")]
+        public string[] Binds {  get; set; }
+
+
         [YamlMember(Alias = "post-build-comment")]
         public string PostBuildComment { get; set; }
 
         public void AddWorkingDir()
         {
-            for (int i = 0; i < Volumes.Length; i++)
+            if(Binds == null) 
+                return;
+
+            for (int i = 0; i < Binds.Length; i++)
             {
-                Volumes[i] = AppContext.BaseDirectory.Replace("\\","/") + Volumes[i];
+                Binds[i] = AppContext.BaseDirectory.Replace("\\","/") + Volumes[i];
             }
         }
     }  

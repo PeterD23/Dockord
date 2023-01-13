@@ -17,7 +17,7 @@ namespace Dockord.Docker
         private Dictionary<string, ExecuteCommand> commands;
 
         private int startPortRange = 5000;
-        private int currentPortAllocation;
+        private int currentPortAllocation; // Replace this with a iterator range checked against already allocated ports
 
         public DockerHandler()
         {
@@ -32,16 +32,30 @@ namespace Dockord.Docker
                 { "!restart", RestartContainer },
                 { "!stats", GetContainerUsageStats },
                 { "!build", BuildContainer },
-                { "!help", UserReference }
+                { "!howdoi", UserReference }
             };
+        }
+
+        public async Task<string> SendCommand(string command)
+        {
+            var first = command.Split()[0];
+            if (commands.ContainsKey(first))
+            {
+                return await commands[first](RemoveFirstWord(command));
+            }
+            return "";
+        }
+
+        private static string RemoveFirstWord(string command)
+        {
+            return command[(command.Split()[0].Length + 1)..].Trim();
         }
 
         private async Task<string> UserReference(string command)
         {
-            var stripped = command.Replace("!help","").Trim();
             return await Task.Run( () =>
             {
-                var definition = YamlController.GetGameDefinition(stripped);
+                var definition = YamlController.GetGameDefinition(command);
                 if (definition != null)
                 {
                     return definition.UserReference;
@@ -52,7 +66,7 @@ namespace Dockord.Docker
 
         private async Task<string> BuildContainer(string command)
         {
-            var strippedVars = command.Replace("!build", "").Trim().Split(" ");
+            var strippedVars = command.Split();
 
             var gameDefinition = YamlController.GetGameDefinition(strippedVars[0]);
             if (gameDefinition == null)
@@ -73,18 +87,19 @@ namespace Dockord.Docker
                 Image = gameDefinition.ImageName,
                 ExposedPorts = gameDefinition.Ports.ToDictionary(port => port, port => new EmptyStruct()),
                 Env = environmentVars,
+                Volumes = gameDefinition.Volumes.ToDictionary(volume => volume, volume => new EmptyStruct()),
                 HostConfig = new HostConfig()
                 {
-                    PortBindings = BuildAvailablePortRanges(gameDefinition.Ports),
-                    Binds = gameDefinition.Volumes
+                    PortBindings = GenerateAvailablePortRanges(gameDefinition.Ports),
+                    Binds = gameDefinition.Binds,
                 }
             };
 
             foreach (var folderPath in gameDefinition.FoldersToCreate)
             {
-                if (!Directory.Exists(folderPath))
+                if (!Directory.Exists($"./ContainerData/{folderPath}"))
                 {
-                    Directory.CreateDirectory("./ContainerData/"+folderPath);
+                    Directory.CreateDirectory($"./ContainerData/{folderPath}");
                 }
             };
 
@@ -111,47 +126,15 @@ namespace Dockord.Docker
             }
         }
 
-        private IDictionary<string, IList<PortBinding>> BuildAvailablePortRanges(string[] portRanges)
-        {
-            var portBindings = new Dictionary<string, IList<PortBinding>>();
-            foreach (var portRange in portRanges)
-            {
-                // Is there an easier way to do this?
-                var protocol = portRange.Split("/")[1];
-
-                // This will generate a range of ports from X-Y, unless there is no range (arr length = 1) in which case it just creates a range of 1
-                var range = Array.ConvertAll(portRange.Split("/")[0].Split("-"), int.Parse);
-                var numericPorts = Enumerable.Range(range[0], range.Length > 1 ? (range[1] - range[0]) + 1 : 1).ToList();
-
-                foreach (var num in numericPorts)
-                {
-                    var bindingPort = currentPortAllocation;
-                    currentPortAllocation += 1;
-
-                    var binding = new List<PortBinding>
-                    {
-                        new PortBinding
-                        {
-                            HostPort = $"{bindingPort}"
-                        }
-                    };
-                    portBindings.Add($"{num}/{protocol}", binding);
-                }
-            }
-            return portBindings;
-        }
-
-
         private async Task<string> RestartContainer(string command)
         {
-            var stripped = command.Replace("!restart", "").Trim();
             try
             {
-                await _client.Containers.RestartContainerAsync(stripped, new ContainerRestartParameters());
+                await _client.Containers.RestartContainerAsync(command, new ContainerRestartParameters());
             }
             catch (DockerContainerNotFoundException)
             {
-                return $"Container {stripped} was not found.";
+                return $"Container {command} was not found.";
             }
             catch (ArgumentNullException)
             {
@@ -161,17 +144,7 @@ namespace Dockord.Docker
             {
                 return "Failed due to the Docker Daemon returning an error.";
             }
-            return $"Container {stripped} was successfully restarted.";
-        }
-
-        public async Task<string> SendCommand(string command)
-        {
-            var first = command.Split(" ")[0];
-            if (commands.ContainsKey(first))
-            {
-                return await commands[first](command);
-            }
-            return "";
+            return $"Container {command} was successfully restarted.";
         }
 
         private async Task<string> GetListOfContainers()
@@ -195,15 +168,13 @@ namespace Dockord.Docker
 
         private async Task<string> GetContainerUsageStats(string command)
         {
-            var stripped = command.Replace("!stats", "").Trim();
-
             var parameters = new ContainerStatsParameters()
             {
                 Stream = false
             };
 
             var progress = new Collapsable<ContainerStatsResponse>();
-            await _client.Containers.GetContainerStatsAsync(stripped, parameters, progress);
+            await _client.Containers.GetContainerStatsAsync(command, parameters, progress);
             var final = progress.ReturnValue();
 
             // https://docs.docker.com/engine/api/v1.41/#tag/Container/operation/ContainerStats
@@ -220,7 +191,7 @@ namespace Dockord.Docker
             return $"```{header}\n{breakdown}```";
         }
 
-        private string GenerateReadableStringFromContainer(ContainerListResponse container)
+        private static string GenerateReadableStringFromContainer(ContainerListResponse container)
         {
             var portData = "";
             foreach (var port in container.Ports)
@@ -232,5 +203,34 @@ namespace Dockord.Docker
             return string.Format($"{container.ID[..4],-6}{string.Join(",", container.Names),-25}{container.State,-9}{container.Status,-15}{portData,-20}");
         }
 
+        private IDictionary<string, IList<PortBinding>> GenerateAvailablePortRanges(string[] portRanges)
+        {
+            var portBindings = new Dictionary<string, IList<PortBinding>>();
+            foreach (var portRange in portRanges)
+            {
+                var split = portRange.Split("/");
+                var protocol = split.Length > 1 ? $"/{split[1]}" : "";
+
+                // This will generate a range of ports from X-Y, unless there is no range (arr length = 1) in which case it just creates a range of 1
+                var range = Array.ConvertAll(portRange.Split("/")[0].Split("-"), int.Parse);
+                var numericPorts = Enumerable.Range(range[0], range.Length > 1 ? (range[1] - range[0]) + 1 : 1).ToList();
+
+                foreach (var num in numericPorts)
+                {
+                    var bindingPort = currentPortAllocation;
+                    currentPortAllocation += 1;
+
+                    var binding = new List<PortBinding>
+                    {
+                        new PortBinding
+                        {
+                            HostPort = $"{bindingPort}"
+                        }
+                    };
+                    portBindings.Add($"{num}{protocol}", binding);
+                }
+            }
+            return portBindings;
+        }
     }
 }

@@ -14,6 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Defs\ut99.yml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Defs\valheim.yml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
