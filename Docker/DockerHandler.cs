@@ -46,8 +46,10 @@ namespace Dockord.Docker
             return "";
         }
 
-        private static string RemoveFirstWord(string command)
+        private string RemoveFirstWord(string command)
         {
+            if(command.Split().Length == 1)
+                return "";
             return command[(command.Split()[0].Length + 1)..].Trim();
         }
 

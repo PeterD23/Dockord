@@ -43,7 +43,7 @@ namespace Dockord.Docker
 
             for (int i = 0; i < Binds.Length; i++)
             {
-                Binds[i] = AppContext.BaseDirectory.Replace("\\","/") + Volumes[i];
+                Binds[i] = AppContext.BaseDirectory.Replace("\\","/") + Binds[i];
             }
         }
     }  

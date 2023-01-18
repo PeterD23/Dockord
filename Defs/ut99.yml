@@ -1,5 +1,5 @@
 ---
-help: Welcome to Unreal Tournament! To build this one, you'll want to type "!build ut99 container_name server_name password douplink" where 'container_name' is the name you want to give to the container, 'server_name' is the name of the server that will appear, 'password' is the password, 'douplink' should be 'true' or 'false' if you want to upload to the master server or not. Make sure you write the password down when you're done!
+help: Welcome to Unreal Tournament! To build this one, you'll want to type "!build ut99 container_name server_name password web_password" where 'container_name' is the name you want to give to the container, 'server_name' is the name of the server that will appear, 'password' is the password, 'web_password' is the password to access the admin server. Make sure you write both passwords down when you're done!
 image-name: roemer/ut99-server
 folders:
   - ut99/ut99-data
@@ -11,9 +11,9 @@ ports:
 environment:
   - UT_SERVERNAME
   - UT_GAMEPWD
+  - UT_WEBADMINPWD
 optional-env:
   - UT_WEBADMINUSER
-  - UT_WEBADMINPWD
 volumes:
   - ut99-data:/ut-data
 binds:
