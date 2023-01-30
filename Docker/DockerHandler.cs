@@ -1,4 +1,5 @@
-﻿using Docker.DotNet;
+﻿using Discord.WebSocket;
+using Docker.DotNet;
 using Docker.DotNet.Models;
 using Dockord.Core;
 using System;
@@ -11,51 +12,48 @@ namespace Dockord.Docker
 {
     public class DockerHandler
     {
-        private delegate Task<string> ExecuteCommand(string command);
+        private delegate Task<string> ExecuteCommand(string command, SocketTextChannel callback);
 
         private DockerClient _client;
         private Dictionary<string, ExecuteCommand> commands;
 
-        private int startPortRange = 5000;
-        private int currentPortAllocation; // Replace this with a iterator range checked against already allocated ports
+        private int currentPortAllocation = 0; // Replace this with a iterator range checked against already allocated ports
 
         public DockerHandler()
         {
             _client = new DockerClientConfiguration().CreateClient();
             _client.DefaultTimeout = TimeSpan.FromSeconds(10);
 
-            currentPortAllocation = startPortRange;
-
             commands = new()
             {
-                { "!containers", async x => await GetListOfContainers() },
-                { "!restart", RestartContainer },
-                { "!stats", GetContainerUsageStats },
-                { "!build", BuildContainer },
-                { "!howdoi", UserReference }
+                { "/containers", async (x, y) => await GetListOfContainers() },
+                { "/restart", RestartContainer },
+                { "/stats", async (x, y) => await GetContainerUsageStats(x) },
+                { "/build", BuildContainer },
+                { "/howdoi", async (x, y) => await UserReference(x) }
             };
         }
 
-        public async Task<string> SendCommand(string command)
+        public async Task<string> SendCommand(string command, SocketTextChannel callback)
         {
             var first = command.Split()[0];
             if (commands.ContainsKey(first))
             {
-                return await commands[first](RemoveFirstWord(command));
+                return await commands[first](RemoveFirstWord(command), callback);
             }
             return "";
         }
 
         private string RemoveFirstWord(string command)
         {
-            if(command.Split().Length == 1)
+            if (command.Split().Length == 1)
                 return "";
             return command[(command.Split()[0].Length + 1)..].Trim();
         }
 
         private async Task<string> UserReference(string command)
         {
-            return await Task.Run( () =>
+            return await Task.Run(() =>
             {
                 var definition = YamlController.GetGameDefinition(command);
                 if (definition != null)
@@ -66,9 +64,19 @@ namespace Dockord.Docker
             });
         }
 
-        private async Task<string> BuildContainer(string command)
+        private async Task<string> BuildContainer(string command, SocketTextChannel callback)
         {
+           if (currentPortAllocation == 0)
+            {
+                var dbValue = await SQLiteController.GetConfigValueFromDB(ConfigKeys.StartPortRange);
+                currentPortAllocation = int.Parse(dbValue.ToString());
+            }
+
             var strippedVars = command.Split();
+            if (strippedVars.Length == 1)
+                return "Cannot build with only 1 parameter.";
+
+            var containerName = strippedVars[1];
 
             var gameDefinition = YamlController.GetGameDefinition(strippedVars[0]);
             if (gameDefinition == null)
@@ -85,17 +93,18 @@ namespace Dockord.Docker
 
             var parameters = new CreateContainerParameters()
             {
-                Name = strippedVars[1],
+                Name = containerName,
                 Image = gameDefinition.ImageName,
                 ExposedPorts = gameDefinition.Ports.ToDictionary(port => port, port => new EmptyStruct()),
                 Env = environmentVars,
                 Volumes = gameDefinition.Volumes.ToDictionary(volume => volume, volume => new EmptyStruct()),
                 HostConfig = new HostConfig()
                 {
-                    PortBindings = GenerateAvailablePortRanges(gameDefinition.Ports),
+                    PortBindings = GenerateAvailablePortRanges(gameDefinition.Ports, await SQLiteController.GetPortAllocationsFromDB()),
                     Binds = gameDefinition.Binds,
                 }
             };
+            var portBindings = ConvertPortBindingsToString(parameters.HostConfig.PortBindings);
 
             foreach (var folderPath in gameDefinition.FoldersToCreate)
             {
@@ -106,6 +115,7 @@ namespace Dockord.Docker
             };
 
             // Pull the image first
+            await callback.SendMessageAsync("Pulling image, this may take a while...");
             await _client.Images.CreateImageAsync(
             new ImagesCreateParameters
             {
@@ -114,22 +124,29 @@ namespace Dockord.Docker
             },
             null,
             new Progress<JSONMessage>());
+            await callback.SendMessageAsync("Pull complete!");
 
-            // Then create the container, and run it!
+            // Then create the container, add port bindings to the DB, and run it!
+            await callback.SendMessageAsync("Creating container with parameters...");
             var response = await _client.Containers.CreateContainerAsync(parameters);
+            SQLiteController.AddValueToPortAllocations(containerName, portBindings);
+
+            await callback.SendMessageAsync("Create complete! Now attempting to start container...");
             var started = await _client.Containers.StartContainerAsync(strippedVars[1], new());
 
             if (started)
             {
                 return $"Success! Container {strippedVars[1]} is up! ID is {response.ID[..4]}. {gameDefinition.PostBuildComment}";
-            } else
+            }
+            else
             {
                 return "Oh no, something went wrong. I'll put a more descriptive error in here later.";
             }
         }
 
-        private async Task<string> RestartContainer(string command)
+        private async Task<string> RestartContainer(string command, SocketTextChannel callback)
         {
+            await callback.SendMessageAsync($"Attempting to restart container {command}");
             try
             {
                 await _client.Containers.RestartContainerAsync(command, new ContainerRestartParameters());
@@ -205,8 +222,9 @@ namespace Dockord.Docker
             return string.Format($"{container.ID[..4],-6}{string.Join(",", container.Names),-25}{container.State,-9}{container.Status,-15}{portData,-20}");
         }
 
-        private IDictionary<string, IList<PortBinding>> GenerateAvailablePortRanges(string[] portRanges)
+        private IDictionary<string, IList<PortBinding>> GenerateAvailablePortRanges(string[] portRanges, List<string> existingPorts)
         {
+            var portAllocations = new List<int>();
             var portBindings = new Dictionary<string, IList<PortBinding>>();
             foreach (var portRange in portRanges)
             {
@@ -219,7 +237,7 @@ namespace Dockord.Docker
 
                 foreach (var num in numericPorts)
                 {
-                    var bindingPort = currentPortAllocation;
+                    var bindingPort = GetNextAvailablePort(existingPorts);
                     currentPortAllocation += 1;
 
                     var binding = new List<PortBinding>
@@ -233,6 +251,26 @@ namespace Dockord.Docker
                 }
             }
             return portBindings;
+        }
+
+        private int GetNextAvailablePort(List<string> existingPorts)
+        {
+            while (existingPorts.Contains(currentPortAllocation.ToString()))
+                currentPortAllocation += 1;
+            return currentPortAllocation;
+        }
+
+        private string ConvertPortBindingsToString(IDictionary<string, IList<PortBinding>> portBindings)
+        {
+            var assignedPorts = new List<string>();
+            foreach (var bind in portBindings)
+            {
+                foreach (var port in bind.Value)
+                {
+                    assignedPorts.Add(port.HostPort);
+                }
+            }
+            return string.Join(",", assignedPorts);
         }
     }
 }
