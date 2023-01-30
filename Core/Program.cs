@@ -16,7 +16,7 @@ namespace Dockord.Core
         {
             if (!File.Exists("dockord.db"))
             {
-               SQLiteController.CreateNewDB();
+               SQLiteController.CreateDefaultDB();
             }
 
             if (!Directory.Exists("ContainerData"))

@@ -18,7 +18,7 @@ namespace Dockord.Discord
 
         private ulong approvedRole = 0L;
 
-        private delegate Task<string> DockerTrigger(string command);
+        private delegate Task<string> DockerTrigger(string command, SocketTextChannel channel);
         private DockerTrigger SendCommand;
 
         public DiscordHandler()
@@ -84,12 +84,12 @@ namespace Dockord.Discord
 
                 var messageContent = message.Content;
 
-                if (!RoleMatchesApproved(message.Author) || !messageContent.StartsWith("!")) return;
+                if (!RoleMatchesApproved(message.Author) || !messageContent.StartsWith("/")) return;
 
                 await Log(new LogMessage(LogSeverity.Info, "Discord", "Approved User is attempting a command, " + messageContent));
                 var channel = message.Channel as SocketTextChannel;
 
-                var response = await SendCommand(messageContent);
+                var response = await SendCommand(messageContent, channel);
                 if (!response.Equals(""))
                 {
                     await channel.SendMessageAsync(response);
